@@ -1,0 +1,15 @@
+{
+  "name":"AMP — Personal Space",
+  "short_name":"AMP",
+  "description":"One private space for your properties, discipline, life admin and goals.",
+  "start_url":"./",
+  "display":"standalone",
+  "display_override":["standalone","minimal-ui"],
+  "background_color":"#f5f6f1",
+  "theme_color":"#102f2a",
+  "icons":[
+    {"src":"icon.svg","sizes":"any","type":"image/svg+xml","purpose":"any maskable"},
+    {"src":"icon-192.png","sizes":"192x192","type":"image/png"},
+    {"src":"icon-512.png","sizes":"512x512","type":"image/png"}
+  ]
+}
