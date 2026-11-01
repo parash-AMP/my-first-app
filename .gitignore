@@ -1,0 +1,6 @@
+# Private user exports and evidence do not belong in the repository.
+AMP-backup*.json
+AMP-iPhone*.json
+*-evidence.json
+private/
+.DS_Store

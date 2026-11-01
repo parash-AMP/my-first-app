@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="styles.css">
+  <link rel="stylesheet" href="styles.css?v=20261101-tax4">
   <title>AMP — Personal Space</title>
 </head>
 <body>
@@ -34,6 +34,10 @@
   <dialog id="modal" class="modal"><div id="modalContent"></div></dialog>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <input type="file" id="importFile" accept=".json,application/json" hidden>
-  <script defer src="app.js"></script>
+  <script defer src="tax-engine.js?v=20261101-tax4"></script>
+  <script defer src="tax-ui.js?v=20261101-tax4"></script>
+  <script defer src="backup.js?v=20261101-tax4"></script>
+  <script defer src="enrichment.js?v=20261101-tax4"></script>
+  <script defer src="app.js?v=20261101-tax4"></script>
 </body>
 </html>
