@@ -1,6 +1,9 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const makeBackup = require('../backup.js');
+const makeProfile = require('../personalization.js');
+const makeAchievements = require('../achievements.js');
+const {makeEnvironment,jpeg}=require('./storage-fixture.cjs');
 
 const keys = {app:'app', property:'property', tax:'tax'};
 const base = () => ({
@@ -12,41 +15,20 @@ const base = () => ({
 });
 
 function environment(initial = base()) {
-  const control = {failRead:false, failCommit:false, failStorage:null, writes:0, docWrites:0};
-  const map = new Map(Object.keys(keys).map(name => [keys[name],JSON.stringify(initial[name])]));
-  let documents = initial.documents.map(({data,...d}) => ({...d,blob:new Blob([Buffer.from(data.split(',')[1],'base64')],{type:d.type})}));
-  const localStorage = {
-    getItem(key){return map.get(key) ?? null;},
-    setItem(key,value){control.writes++;if(control.failStorage?.(key,value))throw new Error('Quota exceeded');map.set(key,String(value));},
-    removeItem(key){control.writes++;map.delete(key);}
-  };
-  const db = {transaction(_name,mode){
-    let staged = structuredClone(documents), stopped = false;
-    const actions = [];
-    const tx = {error:null,abort(){stopped=true;queueMicrotask(()=>tx.onabort?.());},objectStore(){return {
-      getAll(){const request={};actions.push(()=>{if(control.failRead)throw new Error('Unreadable');request.result=structuredClone(documents);request.onsuccess?.();});return request;},
-      clear(){actions.push(()=>{staged=[];});return {};},
-      put(document){actions.push(()=>{staged.push(structuredClone(document));});return {};}
-    };}};
-    setTimeout(()=>{
-      if(stopped)return;
-      try {
-        for(const action of actions)action();
-        if(mode==='readwrite'&&control.failCommit)throw new Error('Commit failed');
-        if(mode==='readwrite'){documents=staged;control.docWrites++;}
-        tx.oncomplete?.();
-      } catch(error){tx.error=error;tx.onabort?.();}
-    },0);
-    return tx;
-  }};
-  const indexedDB = {open(){const request={};queueMicrotask(()=>{request.result=db;request.onsuccess?.();});return request;}};
-  return {api:makeBackup({localStorage,indexedDB,Blob,atob,btoa}),control,map,documents:()=>documents};
+  const decode=({data,...record})=>({...record,blob:new Blob([Buffer.from(data.split(',')[1],'base64')],{type:record.type})});
+  const localEntries=Object.keys(keys).map(name=>[keys[name],JSON.stringify(initial[name])]);
+  if(initial.personalization)localEntries.push(['amp-profile-v1',JSON.stringify(initial.personalization)]);
+  if(initial.achievements)localEntries.push(['amp-achievements-v1',JSON.stringify(initial.achievements)]);
+  const fixture=makeEnvironment({documents:initial.documents.map(decode),photos:(initial.photos||[]).map(decode),localEntries});
+  fixture.env.AMPProfile=makeProfile(fixture.env);
+  fixture.env.AMPAchievements=makeAchievements(fixture.env);
+  return {...fixture,api:makeBackup(fixture.env),documents:()=>fixture.assets('documents'),photos:()=>fixture.assets('photos')};
 }
 
 test('complete export preserves unknown records and document bytes',async()=>{
   const original=base(), env=environment(original);
   const result=await env.api.exportPayload(original);
-  assert.equal(result.format,'amp-backup-v2');
+  assert.equal(result.format,'amp-backup-v3');
   assert.deepEqual(result.app,original.app);
   assert.deepEqual(result.property,original.property);
   assert.deepEqual(result.tax,original.tax);
@@ -92,7 +74,7 @@ test('successful restore retains recovery copy of all previous modules and attac
   for(const name of Object.keys(keys))assert.deepEqual(JSON.parse(env.map.get(keys[name])),replacement[name]);
   assert.deepEqual(env.documents(),[]);
   assert.deepEqual(result.documents,[]);
-  const recovery=env.api.readRecovery();
+  const recovery=await env.api.readRecovery();
   for(const name of Object.keys(keys))assert.deepEqual(recovery[name],original[name]);
   assert.deepEqual(recovery.documents,original.documents);
 });
@@ -104,7 +86,7 @@ test('document commit failure rolls localStorage back and keeps previous documen
   for(const name of Object.keys(keys))assert.deepEqual(JSON.parse(env.map.get(keys[name])),original[name]);
   assert.equal(env.documents().length,1);assert.equal(env.documents()[0].id,'doc-1');
   assert.equal(await env.documents()[0].blob.text(),'abc');
-  assert.ok(env.api.readRecovery());
+  assert.ok(await env.api.readRecovery());
 });
 
 test('partial localStorage write failure rolls back without changing documents',async()=>{
@@ -118,7 +100,7 @@ test('partial localStorage write failure rolls back without changing documents',
 
 test('refuses restore when complete recovery copy cannot be persisted',async()=>{
   const original=base(), env=environment(original);
-  env.control.failStorage=key=>key===env.api.recoveryKey;
+  env.control.failRecovery=true;
   await assert.rejects(env.api.restore(base(),{storageKeys:keys}),/No records were replaced/);
   for(const name of Object.keys(keys))assert.deepEqual(JSON.parse(env.map.get(keys[name])),original[name]);
   assert.equal(env.control.docWrites,0);
@@ -199,4 +181,152 @@ test('malformed student loan review and source evidence are rejected before writ
     await assert.rejects(env.api.restore(payload,{storageKeys:keys}));
     assert.equal(env.control.writes,0);assert.equal(env.control.docWrites,0);
   }
+});
+
+function photo(id,kind,propertyId=''){
+  const bytes=jpeg(1,1);return {id,kind,propertyId,type:'image/jpeg',size:bytes.length,width:1,height:1,createdAt:'2026-11-01T12:00:00.000Z',data:'data:image/jpeg;base64,'+Buffer.from(bytes).toString('base64')};
+}
+function withPhotos(){
+  return {...base(),format:'amp-backup-v3',personalization:{version:1,displayName:'Parash',avatarPhotoId:'avatar-1',propertyPhotos:{'property-1':'house-1'}},photos:[photo('avatar-1','avatar'),photo('house-1','property','property-1')]};
+}
+
+test('v3 complete export preserves metadata and original compressed photo bytes',async()=>{
+  const original=withPhotos(),env=environment(original),exported=await env.api.exportPayload(original);
+  assert.equal(exported.format,'amp-backup-v3');assert.deepEqual(exported.personalization,original.personalization);assert.deepEqual(exported.photos,original.photos);
+  assert.deepEqual(exported.app,original.app);assert.deepEqual(exported.property,original.property);assert.deepEqual(exported.tax,original.tax);
+});
+
+test('v3 profile status round-trips while older v3 metadata without status remains supported',async()=>{
+  const legacy=withPhotos(),env=environment(legacy);
+  assert.deepEqual(env.api.validate(legacy).personalization,legacy.personalization);
+  const incoming=withPhotos();incoming.personalization.status='Making progress.';
+  const restored=await env.api.restore(incoming,{storageKeys:keys});
+  assert.equal(restored.personalization.status,'Making progress.');
+  assert.equal((await env.api.exportPayload(restored)).personalization.status,'Making progress.');
+  const invalid=withPhotos();invalid.personalization.status='x'.repeat(161);
+  assert.throws(()=>env.api.validate(invalid),/160 characters/);
+});
+
+test('v3 restore commits documents/photos together and recovery keeps native Blobs outside localStorage',async()=>{
+  const original=withPhotos(),env=environment(original),replacement=withPhotos();
+  replacement.personalization={version:1,displayName:'New profile',avatarPhotoId:'new-avatar',propertyPhotos:{}};
+  replacement.photos=[photo('new-avatar','avatar')];replacement.documents=[];
+  env.control.failStorage=key=>key===env.api.recoveryKey;
+  await env.api.restore(replacement,{storageKeys:{...keys,personalization:'amp-profile-v1'}});
+  assert.deepEqual(JSON.parse(env.map.get('amp-profile-v1')),replacement.personalization);assert.deepEqual(env.photos().map(p=>p.id),['new-avatar']);assert.deepEqual(env.documents(),[]);
+  assert.equal(env.map.has(env.api.recoveryKey),false);
+  const snapshot=env.recovery();assert.equal(snapshot.photos.length,2);assert.ok(snapshot.photos[0].blob instanceof Blob);assert.equal(snapshot.photos[0].data,undefined);
+  assert.ok(snapshot.documents[0].blob instanceof Blob);assert.equal(snapshot.documents[0].data,undefined);
+  const recovery=await env.api.readRecovery();assert.deepEqual(recovery.photos,original.photos);assert.deepEqual(recovery.personalization,original.personalization);assert.deepEqual(recovery.documents,original.documents);
+});
+
+test('old v1 and v2 full restores preserve the current profile metadata and photos exactly',async()=>{
+  for(const format of ['amp-backup-v1','amp-backup-v2']){
+    const original=withPhotos(),env=environment(original),replacement={...base(),format};if(format==='amp-backup-v1')delete replacement.tax;
+    const oldRaw=env.map.get('amp-profile-v1');replacement.documents=[];
+    const result=await env.api.restore(replacement,{storageKeys:keys});
+    assert.equal(env.map.get('amp-profile-v1'),oldRaw);assert.deepEqual(result.personalization,original.personalization);assert.deepEqual(env.photos().map(p=>p.id),['avatar-1','house-1']);
+    assert.equal(await env.photos()[0].blob.arrayBuffer().then(b=>Buffer.from(b).toString('base64')),original.photos[0].data.split(',')[1]);assert.deepEqual(env.documents(),[]);
+  }
+});
+
+test('photo transaction failure preserves old documents, photos and every local record key',async()=>{
+  const original=withPhotos(),env=environment(original),replacement=withPhotos();replacement.photos=[];replacement.personalization={version:1,displayName:'New',avatarPhotoId:'',propertyPhotos:{}};replacement.documents=[];
+  env.control.failCommit=true;
+  await assert.rejects(env.api.restore(replacement,{storageKeys:keys}),/previous records were restored/);
+  for(const name of Object.keys(keys))assert.deepEqual(JSON.parse(env.map.get(keys[name])),original[name]);
+  assert.deepEqual(JSON.parse(env.map.get('amp-profile-v1')),original.personalization);assert.equal(env.documents().length,1);assert.equal(env.photos().length,2);assert.ok(await env.api.readRecovery());
+});
+
+test('profile metadata quota failure rolls back all local keys before any asset replacement',async()=>{
+  const original=withPhotos(),env=environment(original),replacement=withPhotos();replacement.app.habits=[];replacement.personalization.displayName='New';
+  let failed=false;env.control.failStorage=key=>{if(key==='amp-profile-v1'&&!failed){failed=true;return true;}return false;};
+  await assert.rejects(env.api.restore(replacement,{storageKeys:keys}),/previous records were restored/);
+  for(const name of Object.keys(keys))assert.deepEqual(JSON.parse(env.map.get(keys[name])),original[name]);
+  assert.deepEqual(JSON.parse(env.map.get('amp-profile-v1')),original.personalization);assert.equal(env.control.docWrites,0);
+});
+
+test('quota preflight refuses replacement before recovery or original records are mutated',async()=>{
+  const original=withPhotos(),env=environment(original);env.control.quota=1;
+  await assert.rejects(env.api.restore(withPhotos(),{storageKeys:keys}),/No records were replaced/);
+  assert.equal(env.control.writes,0);assert.equal(env.control.docWrites,0);assert.equal(env.control.recoveryWrites,0);assert.equal(env.photos().length,2);
+});
+
+test('missing references, SVG/spoofed photos and wrong dimensions are rejected before writes',async()=>{
+  const mutations=[p=>p.photos=[],p=>p.photos.push({...p.photos[0]}),p=>p.photos[0].width=1601,p=>p.photos[0].width=2,p=>p.photos[0].data='data:image/svg+xml;base64,PHN2Zy8+',p=>{const bytes=Buffer.from('<svg/>');Object.assign(p.photos[0],{data:'data:image/jpeg;base64,'+bytes.toString('base64'),size:bytes.length});}];
+  for(const mutate of mutations){const env=environment(),incoming=withPhotos();mutate(incoming);await assert.rejects(env.api.restore(incoming,{storageKeys:keys}));assert.equal(env.control.writes,0);assert.equal(env.control.docWrites,0);assert.equal(env.control.recoveryWrites,0);}
+});
+
+test('corrupt saved profile blocks a complete export instead of silently omitting it',async()=>{
+  const env=environment();env.map.set('amp-profile-v1','broken profile');
+  await assert.rejects(env.api.exportPayload({...base(),personalization:{version:1,displayName:'',avatarPhotoId:'',propertyPhotos:{}}}),/could not be read/);
+  assert.equal(env.control.writes,0);
+});
+
+test('legacy local recovery stays readable and explicit recovery erase removes both generations',async()=>{
+  const env=environment();env.map.set(env.api.recoveryKey,JSON.stringify({format:'amp-recovery-v1',payload:base()}));
+  assert.equal((await env.api.readRecovery()).format,'amp-backup-v2');
+  await env.api.restore(base(),{storageKeys:keys});assert.equal((await env.api.readRecovery()).format,'amp-backup-v3');
+  await env.api.clearRecovery();assert.equal(env.map.has(env.api.recoveryKey),false);assert.equal(await env.api.readRecovery(),null);
+});
+
+const badge=(habitId='habit-1')=>({id:'7-day:'+encodeURIComponent(habitId),habitId,habitName:'Gym',kind:'week',earnedOn:'2026-10-25'});
+
+test('v3 complete exports include saved badges without inferring any achievements from habit history',async()=>{
+  const original=withPhotos();original.achievements={version:1,badges:[badge()]};
+  const env=environment(original),exported=await env.api.exportPayload(original);
+  assert.deepEqual(exported.achievements,original.achievements);
+  assert.deepEqual(exported.app,original.app);assert.deepEqual(exported.property,original.property);assert.deepEqual(exported.tax,original.tax);
+  const noSaved=environment();
+  const checks={};for(let day=19;day<=25;day++)checks['2026-10-'+day]={'habit-1':true};
+  const history={...base(),app:{...base().app,checks}};
+  assert.deepEqual((await noSaved.api.exportPayload(history)).achievements,{version:1,badges:[]});
+});
+
+test('v1, v2 and earlier v3 restores keep current saved badges and their exact raw storage',async()=>{
+  for(const format of ['amp-backup-v1','amp-backup-v2','amp-backup-v3']){
+    const original=withPhotos();original.achievements={version:1,badges:[badge()]};
+    const env=environment(original),incoming=format==='amp-backup-v3'?withPhotos():{...base(),format};
+    if(format==='amp-backup-v1')delete incoming.tax;
+    const raw=env.map.get('amp-achievements-v1');
+    const restored=await env.api.restore(incoming,{storageKeys:keys});
+    assert.equal(env.map.get('amp-achievements-v1'),raw);assert.deepEqual(restored.achievements,original.achievements);
+    assert.deepEqual((await env.api.readRecovery()).achievements,original.achievements);
+  }
+});
+
+test('explicit v3 badge restore is recoverable and rolls back the fifth key on asset failure',async()=>{
+  const original=withPhotos();original.achievements={version:1,badges:[badge()]};
+  const env=environment(original),incoming=withPhotos();incoming.achievements={version:1,badges:[badge('new-badge')]};
+  await env.api.restore(incoming,{storageKeys:{...keys,achievements:'amp-achievements-v1'}});
+  assert.deepEqual(JSON.parse(env.map.get('amp-achievements-v1')),incoming.achievements);
+  assert.deepEqual(env.recovery().records.achievements,original.achievements);
+  const next=withPhotos();next.achievements={version:1,badges:[]};env.control.failCommit=true;
+  const raw=env.map.get('amp-achievements-v1');
+  await assert.rejects(env.api.restore(next,{storageKeys:keys}),/previous records were restored/);
+  assert.equal(env.map.get('amp-achievements-v1'),raw);
+  assert.deepEqual((await env.api.readRecovery()).achievements,incoming.achievements);
+});
+
+test('badge storage quota failure rolls all preceding local writes back before replacing assets',async()=>{
+  const original=withPhotos();original.achievements={version:1,badges:[badge()]};
+  const env=environment(original),incoming=withPhotos();incoming.achievements={version:1,badges:[]};incoming.app.habits[0].name='Changed';incoming.personalization.displayName='Changed';
+  let failed=false;env.control.failStorage=key=>{if(key==='amp-achievements-v1'&&!failed){failed=true;return true;}return false;};
+  await assert.rejects(env.api.restore(incoming,{storageKeys:keys}),/previous records were restored/);
+  assert.deepEqual(JSON.parse(env.map.get('app')),original.app);assert.deepEqual(JSON.parse(env.map.get('amp-profile-v1')),original.personalization);assert.deepEqual(JSON.parse(env.map.get('amp-achievements-v1')),original.achievements);assert.equal(env.control.docWrites,0);
+});
+
+test('malformed or corrupt saved achievement data blocks backup or restore before mutation',async()=>{
+  for(const bad of [{version:1,badges:'bad'},{version:1,badges:[{...badge(),kind:'untrusted'}]},{version:1,badges:[badge(),badge()]}]){
+    const env=environment(),incoming=withPhotos();incoming.achievements=bad;
+    await assert.rejects(env.api.restore(incoming,{storageKeys:keys}));assert.equal(env.control.writes,0);assert.equal(env.control.docWrites,0);
+  }
+  const env=environment();env.map.set('amp-achievements-v1','broken badge JSON');
+  await assert.rejects(env.api.exportPayload(base()));assert.equal(env.control.writes,0);
+});
+
+test('achievement storage keys must remain separate from every other persisted module',async()=>{
+  const env=environment(),incoming=withPhotos();incoming.achievements={version:1,badges:[]};
+  await assert.rejects(env.api.restore(incoming,{storageKeys:{...keys,achievements:'property'}}),/Invalid storage keys/);
+  assert.equal(env.control.writes,0);assert.equal(env.control.docWrites,0);
 });
