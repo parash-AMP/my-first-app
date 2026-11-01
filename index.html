@@ -11,7 +11,7 @@
   <link rel="manifest" href="manifest.json">
   <link rel="icon" href="icon.svg" type="image/svg+xml">
   <link rel="apple-touch-icon" href="icon-192.png">
-  <link rel="stylesheet" href="styles.css?v=20261101-tax4">
+  <link rel="stylesheet" href="styles.css?v=20261101-rewards1">
   <title>AMP — Personal Space</title>
 </head>
 <body>
@@ -25,19 +25,23 @@
     <div class="workspace">
       <header class="topbar">
         <div class="top-left"><button class="mobile-brand" data-page="home" aria-label="Go to dashboard">a<span>·</span></button><div class="page-identity"><span id="breadcrumb" class="tiny-overline">AMP / OVERVIEW</span><span id="topTitle">Your space</span></div></div>
-        <div class="top-right"><span class="today-date" id="todayDate"></span><button class="round-utility" data-action="backup" aria-label="Backup and settings" title="Backup and privacy"><span id="settingsIcon"></span></button></div>
+        <div class="top-right"><span class="today-date" id="todayDate"></span><button class="profile-utility" id="profileButton" data-action="profile" aria-label="Your profile" title="Your profile"></button><button class="round-utility" data-action="backup" aria-label="Backup and settings" title="Backup and privacy"><span id="settingsIcon"></span></button></div>
       </header>
       <main id="main" tabindex="-1" aria-live="polite"></main>
       <nav id="mobileNav" class="bottom-nav" aria-label="Main navigation"></nav>
     </div>
   </div>
   <dialog id="modal" class="modal"><div id="modalContent"></div></dialog>
+  <dialog id="achievementDialog" class="achievement-modal" aria-label="Achievement unlocked"></dialog>
   <div id="toast" class="toast" role="status" aria-live="polite"></div>
   <input type="file" id="importFile" accept=".json,application/json" hidden>
-  <script defer src="tax-engine.js?v=20261101-tax4"></script>
-  <script defer src="tax-ui.js?v=20261101-tax4"></script>
-  <script defer src="backup.js?v=20261101-tax4"></script>
-  <script defer src="enrichment.js?v=20261101-tax4"></script>
-  <script defer src="app.js?v=20261101-tax4"></script>
+  <input type="file" id="photoFile" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" hidden>
+  <script defer src="achievements.js?v=20261101-rewards1"></script>
+  <script defer src="personalization.js?v=20261101-rewards1"></script>
+  <script defer src="tax-engine.js?v=20261101-rewards1"></script>
+  <script defer src="tax-ui.js?v=20261101-rewards1"></script>
+  <script defer src="backup.js?v=20261101-rewards1"></script>
+  <script defer src="enrichment.js?v=20261101-rewards1"></script>
+  <script defer src="app.js?v=20261101-rewards1"></script>
 </body>
 </html>
