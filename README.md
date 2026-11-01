@@ -1,41 +1,89 @@
 # AMP — Personal Space
 
-A polished, mobile-first personal web app with four connected modules:
+AMP is a browser-based personal dashboard for Property, Discipline, Life Admin and Goals. The existing design and modules are retained. This source adds a tax planning calculator inside **Property → Tools & records → UK tax calculator** and strengthens backup and restore.
 
-1. **Property** — property values, rent, mortgage payments, optional mortgage/valuation projections, income and expenses, linked admin cases.
-2. **Discipline** — month-first habit calendar with Week, Month, 6 Months, Year views; default Gym, Portfolio, Journal and <4h screen time, all editable; endless daily check-ins.
-3. **Life Admin** — cases, follow-ups, waiting room, chronological updates, property links, document attachments, calendar-event export, resolved archive.
-4. **Goals** — user-created goals and checkpoints, animated percentage progress, reorder/edit/delete steps, optional target dates and archive.
+This draft is based on `parash-AMP/my-first-app` at commit `935e6720049ffe467658749b7fccd0b828cd45ac`. It is source code only: no personal records, exported backups, email contents or document attachments are bundled.
 
-The dashboard shows summaries from each module. The app is entirely front-end: no third-party libraries, analytics, database server or external login.
+## Tax calculator
 
-## Install into your existing GitHub repository
+The calculator covers an England taxpayer's employment income and sole-owned ordinary UK residential rentals, using verified tax-year rules for **2020/21–2026/27**. Each year has separate saved settings. Future years must be added with verified rules before use.
 
-Your existing repository is `parash-AMP/my-first-app`. GitHub integration access was read-only during creation, so these files have **not** yet been committed to your repository.
+It combines taxable employment pay, PAYE Income Tax already deducted, rental receipts, reviewed allowable costs, eligible residential finance-cost relief, carried-forward property losses and unused finance costs. Eligible relief-at-source pension contributions and Gift Aid can be entered. The January estimate separates the balancing amount from the first next-year payment on account; July shows the second instalment. Previous payments on account reduce the balance without changing the next instalments' calculation base.
 
-1. Back up your existing live Property app first using its **Export backup** function, and keep that JSON somewhere safe.
-2. Download `AMP-Personal-Space.zip` and extract it in the iPhone Files app (tap the zip). The extracted folder contains all the app files, including `index.html`, `app.js`, `styles.css`, `manifest.json`, `sw.js`, and icons.
-3. Open [your repository](https://github.com/parash-AMP/my-first-app) in Safari on your iPhone. On the `main` branch, choose **Add file → Upload files** (GitHub's mobile layout may require desktop website mode).
-4. Upload **the files inside** the extracted `amp-app` folder to the **root** of the repository, not the folder itself. Approve replacing `index.html` if prompted, then commit the changes.
-5. In the repository, check **Settings → Pages**. Use **Deploy from a branch**, select `main` and `/ (root)` if not already selected. Wait for GitHub to publish.
-6. Visit the Pages address from Safari, then select **Share → Add to Home Screen → Add**. Open the AMP icon to launch it in standalone mode.
+- Enter actual taxable employment pay from a P60 or supported records; no personal pay figure is shipped in the code. Do not include National Insurance in PAYE tax deducted.
+- Recorded transactions are filtered by UK tax-year dates, 6 April–5 April. Review each record's tax treatment and eligible amount before relying on the result. Reviews are stored separately; the source transaction stays unchanged. Changed source records require a fresh review.
+- Scheduled monthly rent is not assumed to have been received. An annual rental-receipts total can replace reviewed income records. An annual eligible finance-cost total can replace finance-cost records, preventing double counting.
+- Mortgage capital repayments, personal costs and capital improvements are not running-expense deductions. The full mortgage payment must not be entered as eligible interest.
+- The £1,000 travel figure is an editable **what-if estimate**, excluded from the main calculation. Enter only evidenced eligible additional travel that is not already recorded as an expense. Do not combine mileage and actual vehicle running costs for the same vehicle.
+- An unfinished year's rental records are to date while employment input is annual. The result is not an automatic full-year forecast.
+- Missing PAYE, unreviewed records or incomplete scope checks prevent the headline January/July estimate from being presented as ready. If imported payroll evidence indicates student-loan deductions and the repayment plan is unconfirmed, an explicit review flag blocks the complete January payment even when the scope check is ticked. Unresolved source-review flags also prevent the headline complete January result from being treated as ready. The calculator still covers Income Tax only.
 
-### Important: preserve your existing Property data
+This is a planning estimate using pennies; HMRC's return-box rounding can differ. It is not a submitted tax return or an HMRC-approved computation. Other income, student loans, Child Benefit charges, disposals, joint/company ownership, foreign matters, special allowances, pension allowance charges and Gift Aid shortfalls are outside this calculator's scope. Leave the scope confirmation unticked when they apply.
 
-This app uses the **exact same browser storage key** (`property-manager-v1`) and property record structure as your previous GitHub Pages Property app. Existing data should be recognized **if AMP opens at the same GitHub Pages origin in the same iPhone browser profile**. No automatic migration is possible across different website origins, devices, or wiped browser storage.
+Official references are linked in the app and in `tax-engine.js`, including [Income Tax rates](https://www.gov.uk/government/publications/rates-and-allowances-income-tax/income-tax-rates-and-allowances-current-and-past), [rental income and expenses](https://www.gov.uk/guidance/income-tax-when-you-rent-out-a-property-working-out-your-rental-income), [residential finance-cost relief](https://www.gov.uk/guidance/changes-to-tax-relief-for-residential-landlords-how-its-worked-out-including-case-studies), [payments on account](https://www.gov.uk/understand-self-assessment-bill/payments-on-account), and [property-business travel](https://www.gov.uk/hmrc-internal-manuals/property-income-manual/pim2220).
 
-The original property's features are reimplemented in the integrated view; it isn't embedded as the old page. For safety, export an existing backup **before replacing `index.html`**. The old property-only JSON backup cannot be imported with the new **AMP-wide** importer directly. If existing data is missing after deployment, restore the original `index.html` from GitHub history, import your original property backup there, then redeploy AMP from the same origin; or seek help converting the backup to AMP format. Do not delete your only backup.
+## Existing records and migration
 
-### Privacy & data durability
+Existing records remain under their original localStorage keys:
 
-- Your records are saved **locally in the browser** using localStorage; documents use IndexedDB. They are not sent to GitHub or a server.
-- The repository may be public. **Never add your real data, documents, bank details or exported backups to it.**
-- Browser storage is **not encrypted**; anyone with access to the unlocked browser profile may be able to read it. Use device access protection, and avoid highly sensitive documents unless you understand this limitation.
-- iOS clearing website data, switching device/browser/origin, or site storage eviction can erase records. Export AMP backups after changes; backup files include sensitive records and should be secured.
-- Calendar reminders are **not push notifications**. Life Admin can export an `.ics` calendar event to import into your calendar. Real calendar sync and notifications require extra setup or an integration.
-- Any balance or valuation projection is an estimate. No lender feed or live house-price API is connected.
-- AMP is an installable web app, not an App Store binary. It can use its offline cache after a successful first load; available offline behaviours can vary by iOS version.
+- `amp-personal-space-v1`: habits, check-ins, goals and Life Admin cases.
+- `property-manager-v1`: properties and transactions.
+- `amp-tax-v1`: new, separate versioned tax settings.
+
+Saving tax settings does not rewrite the original two keys. The first tax save retains their exact original raw contents under `amp-before-tax-v1`. This small local recovery snapshot does not contain attached documents and is not a substitute for a complete exported backup. Loading and ordinary saves preserve unknown fields. Ordinary saving is blocked if existing stored records cannot be read, and a failed two-key save attempts to restore their previous values.
+
+There is no automatic migration between devices, browser profiles or website origins. Existing records are expected to remain available only when the updated app opens at the **same existing app address in the same browser/profile**. A desktop preview has separate browser storage from an iPhone.
+
+## Add missing details from a private backup
+
+After the live code is updated, use **Backup & privacy → Add missing details from private backup** for an assistant-enriched backup. This additive import is the recommended way to bring selected document findings into an iPhone that may have newer activity than the exported backup.
+
+The importer matches existing property IDs and fills only missing supported details, such as address, lender, rate, fixed-rate end date and document references, plus missing tax settings. It does not replace newer habit check-ins, goals, Life Admin cases, transactions, balances or mortgage payments. It does not recreate properties that have since been deleted. Existing populated values are retained; uncertain document information still needs review. Imported mortgage rate evidence does not start or alter a mortgage projection until the user explicitly saves projection settings. Unresolved payroll evidence has a separate review confirmation before the source-review block can be cleared.
+
+Export a fresh complete backup on the original device first, then review the additive import and verify the new details. An enriched backup contains private records and evidence: keep it separate from the source repository. Additive import is different from full restore below.
+
+## Full backup and restore
+
+Use **Backup & privacy → Export everything** before an update and keep that file in a safe location.
+
+- New complete exports use `amp-backup-v2` and include all modules, transactions, tax settings and locally attached documents. Export stops if documents cannot be read; it does not silently omit them.
+- The updated importer accepts older **AMP-wide `amp-backup-v1`** files and new v2 files. A v1 full restore has no tax settings, so it restores an empty tax section. The full-restore action explicitly replaces all records; choose the separate additive import for an enriched backup when current device activity must be preserved.
+- Old property-only exports are not AMP-wide v1 files and are not directly supported by this importer.
+- Restore validates records and decodes every attachment before any replacement. It stores a complete pre-restore recovery copy under `amp-before-restore-v1`, then restores document records in one completed IndexedDB transaction.
+- If the complete recovery copy cannot fit, restore refuses to replace current data. For ordinary restore failures, it attempts to roll localStorage back. The recovery copy can be downloaded from Backup & privacy.
+- localStorage and IndexedDB cannot be committed as one transaction. A browser/device crash between stages is still a risk; keep the exported backup. Browser storage can be cleared or evicted and is not encrypted.
+- Older AMP code does not understand v2 exports. Retain the original v1 backup as well as a new export until the update is verified.
+
+## Safe rollout and rollback
+
+1. Export a complete backup from the existing live app on the device that holds the records. Keep it separate from this source.
+2. Review/test the source and its migration using a private copy of that backup. Check properties, transactions, habit history, goals, cases and attachments.
+3. Obtain approval for the live change. Updating the production branch may automatically trigger GitHub Pages; this source archive does not deploy itself.
+4. Deploy all source assets together at the existing app address. Do not change the origin or clear the device's browser data. Close other AMP tabs during restore/update checks.
+5. Verify record counts and key records on the original device. To add assistant-reviewed document findings, use **Add missing details from private backup** after the new code is live. Do not use full restore solely to add those details, because an older snapshot could replace newer phone activity.
+6. Verify imported details, add missing tax inputs and review costs before relying on tax figures.
+7. Keep the pre-update code revision and the original backup. To roll code back, restore the previous source revision at the same address. New tax keys can remain ignored by older code. If data restoration is needed, use a compatible backup with the appropriate app version and verify it before replacing current records.
+
+## Privacy and connectivity
+
+The app has no analytics, cloud database, AI API or Gmail integration. It does not send entered records to GitHub, HMRC or an AI service. External reference links open only when selected. Browser records stay on the current device; the offline service worker caches app assets. Do not commit personal backups, documents, email evidence, credentials or tax figures to a public repository.
+
+Evidence can be reviewed separately by an assistant and added through the additive private-backup importer. The app can display generic tax evidence references and property document references, including lender/rate details when present in local records. Confirmed annual figures may fill empty inputs; payslip snapshots, mortgage offers and uncertain costs remain references rather than assumed full-year receipts or deductions. These private evidence records belong only in browser storage and private backups, never in this source package.
+
+There is no Gmail sync, Gmail API connection or document-extraction service in the runtime app. Any assistant-assisted email review happens outside the app with the user’s authorization; using the additive private-backup importer is the separate step that brings selected records into this device’s local app data.
+
+## Run and verify
+
+No application dependencies or build step are required. Serve the folder with a local static server, for example `python3 -m http.server 8765`, and open its local address. Opening `index.html` directly does not exercise service-worker/offline behaviour.
+
+Use Node.js 20 or newer for the verification suite:
+
+```sh
+node --test tests/*.test.cjs
+```
+
+The suite uses synthetic fixtures only; 54 tests pass in this packaged layout. It covers tax bands and allowances, losses, finance relief, pension/Gift Aid effects, payments on account, date filtering, separate-year settings, exact legacy-record preservation, corrupt/quota failures, complete backup validation and restore rollback. A real-device backup/export/restore check is still needed; the automated IndexedDB tests use a transactional stub.
 
 ## Files
 
-`index.html` is the main shell, `styles.css` the responsive interface, `app.js` the app, `manifest.json` and icons enable Add to Home Screen, and `sw.js` caches the offline shell.
+`index.html`, `styles.css` and `app.js` provide the existing app shell and modules. `tax-engine.js` contains the pure tax calculations; `tax-ui.js` provides the Property tax screen; `backup.js` validates and restores complete backups; `enrichment.js` adds supported missing details without full replacement. `manifest.json`, the icons and `sw.js` support installation and offline assets. `tests/` contains public-safe synthetic verification fixtures.
